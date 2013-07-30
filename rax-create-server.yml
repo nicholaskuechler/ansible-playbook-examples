@@ -3,7 +3,7 @@
 # The playbook creates a new server and installs some packages
 #
 # It injects 2 files in to the new instance:
-# * SSH key to be used latest, when installing packages
+# * SSH key to be used later, when installing packages
 # * A demo test.txt file
 #
 # Run with: ansible-playbook -i inventory.yml rax-create-server.yml -vvv
