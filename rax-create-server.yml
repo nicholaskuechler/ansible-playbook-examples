@@ -1,4 +1,12 @@
-# run with: ansible-playbook -i inventory.yml rax-create-server.yml -vvv
+# Ansible playbook to create a Rackspace Cloud Server
+#
+# The playbook creates a new server and installs some packages
+#
+# It injects 2 files in to the new instance:
+# * SSH key to be used latest, when installing packages
+# * A demo test.txt file
+#
+# Run with: ansible-playbook -i inventory.yml rax-create-server.yml -vvv
 ---
 - name: Create a Rackspace Cloud Server
   hosts: local
