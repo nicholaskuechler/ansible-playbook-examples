@@ -1,0 +1,43 @@
+# run with: ansible-playbook -i inventory.yml rax-create-server.yml -vvv
+---
+- name: Create a Rackspace Cloud Server
+  hosts: local
+  user: root 
+  connection: local
+  gather_facts: False
+
+  vars:
+   - name: ansible-test
+   - flavor: 2
+   - image: 8d30638e-cb3e-43d1-897f-a5cd3ace521f
+   - region: DFW
+   - creds_file: /path/to/pyrax/creds_file
+   - files:
+        - /root/.ssh/authorized_keys=/home/localuser/.ssh/id_rsa.pub
+        - /root/test.txt=/home/localuser/test.txt
+
+  tasks:
+    - name: Make me that server
+      rax: creds_file=${creds_file} service=cloudservers name=${name} flavor=${flavor} files=${files}
+           image=${image} region=${region} state=present wait=yes wait_timeout=900
+      register: rax
+
+    - name: Add new instance to host group
+      local_action: add_host hostname=${item.accessIPv4} groupname=deploy
+      with_items: ${rax.instances}
+
+
+- name: Install Packages
+  hosts: deploy
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: install packages
+    action: yum state=installed pkg=$item
+    with_items:
+    - vim
+    - git
+    - screen
+    tags:
+    - packages
