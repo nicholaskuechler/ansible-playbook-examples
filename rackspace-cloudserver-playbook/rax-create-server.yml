@@ -21,8 +21,8 @@
    - region: DFW
    - creds_file: /path/to/pyrax/creds_file
    - files:
-        - /root/.ssh/authorized_keys=/home/localuser/.ssh/id_rsa.pub
-        - /root/test.txt=/home/localuser/test.txt
+        /root/.ssh/authorized_keys: /home/localuser/.ssh/id_rsa.pub
+        /root/test.txt: /home/localuser/test.txt
 
   tasks:
     - name: Make me that server

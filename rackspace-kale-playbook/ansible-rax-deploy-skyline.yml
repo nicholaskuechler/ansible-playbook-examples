@@ -1,0 +1,111 @@
+# Ansible playbook to create a Skyline node in Rackspace Cloud Servers
+---
+- name: Create a Rackspace Cloud Server for Skyline
+  hosts: local
+  user: root 
+  connection: local
+  gather_facts: False
+
+  tasks:
+    - name: Make me that server
+      action:
+          module: rax
+          creds_file: /home/username/pyrax.creds
+          region: DFW
+          name: skyline-1
+          image: 1bbc5e56-ca2c-40a5-94b8-aa44822c3947
+          flavor: 2
+          files:
+            /root/.ssh/authorized_keys: /home/username/.ssh/id_rsa.pub
+          wait: true
+          wait_timeout: 900
+      register: rax
+
+    - name: Add new instance to host group
+      local_action: add_host hostname=${item.accessIPv4} groupname=skyline
+      with_items: ${rax.instances}
+
+- name: Install Packages
+  hosts: skyline
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: install apt packages
+    action: apt state=installed pkg=$item update-cache=yes
+    with_items:
+    - vim
+    - git
+    - screen
+    - python-dev
+    - python-setuptools
+    - python-pip
+    - python-numpy
+    - python-scipy
+    - python-pandas
+    - python-statsmodels
+    - msgpack-python
+    tags:
+    - packages
+
+  - name: Install patsy
+    action: command pip install patsy
+    tags: packages
+
+- name: Install Skyline
+  hosts: skyline
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: git clone skyline
+    #action: command git clone https://github.com/etsy/skyline.git /opt/skyline
+    git: repo=https://github.com/etsy/skyline.git dest=/opt/skyline
+  - name: install skyline
+    action: command pip install -r /opt/skyline/requirements.txt
+  - name: setup skyline config
+    action: command cp /opt/skyline/src/settings.py.example /opt/skyline/src/settings.py
+
+- name: Make directories
+  hosts: skyline
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: make directories
+    action: command mkdir -p $item
+    with_items:
+      - /var/log/skyline
+      - /var/run/skyline
+      - /var/log/redis
+
+- name: Install redis
+  hosts: skyline
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: install redis
+    action: apt state=installed pkg=$item update-cache=yes
+    with_items:
+    - redis-server
+    - python-redis
+  - name: copy skyline's redis.conf to /etc/redis/redis.conf
+    action: command cp /opt/skyline/bin/redis.conf /etc/redis/redis.conf
+  - name: restart redis
+    action: command /etc/init.d/redis-server restart
+
+- name: Start Skyline
+  hosts: skyline
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: start redis-server
+    action: command redis-server /opt/skyline/bin/redis.conf
+  - name: start horizon.d
+    action: command /opt/skyline/bin/horizon.d start
+  - name: start analyzer.d
+    action: command /opt/skyline/bin/analyzer.d start
+  - name: start webapp.d
+    action: command /opt/skyline/bin/webapp.d start

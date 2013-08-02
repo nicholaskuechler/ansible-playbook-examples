@@ -1,0 +1,24 @@
+results_explain: 0
+elasticsearch:
+  servers:
+{% for host in groups['elasticsearch'] %}
+     - "http://{{ hostvars[host]['ansible_eth0']['ipv4']['address'] }}:9200"
+{% endfor %}
+  index: "metrics"
+  timeout: 30
+  phrase_slop: 20
+  scorers:
+    dtw:
+      radius: 5
+      scale_points: 25
+    euclidian:
+      scale_points: 25
+skyline:
+  host: {% for host in groups['skyline'] %}"{{ hostvars[host]['ansible_eth0']['ipv4']['address'] }}"{% endfor %}
+
+  port: 6379
+  listener_port: 2015
+redis:
+  host: {% for host in groups['oculusredis'] %}"{{ hostvars[host]['ansible_eth0']['ipv4']['address'] }}"{% endfor %}
+
+  port: 6379

@@ -1,0 +1,94 @@
+# Ansible playbook to create an Oculus worker node in Rackspace Cloud Servers
+---
+- name: Create Oculus redis worker node
+  hosts: local
+  user: root 
+  connection: local
+  gather_facts: False
+
+  tasks:
+    - name: Make oculusredis-1
+      action:
+          module: rax
+          creds_file: /home/username/pyrax.creds
+          region: DFW
+          name: oculusredis-2
+          image: 1bbc5e56-ca2c-40a5-94b8-aa44822c3947
+          flavor: 2
+          files:
+            /root/.ssh/authorized_keys: /home/username/.ssh/id_rsa.pub
+          wait: true
+          wait_timeout: 900
+      register: rax
+
+    - name: Add new instance to host group
+      local_action: add_host hostname=${item.accessIPv4} groupname=oculusredis
+      with_items: ${rax.instances}
+
+- name: Install Packages
+  hosts: oculusredis
+  user: root
+  gather_facts: True
+  tasks:
+  - name: install apt packages
+    action: apt state=installed pkg=$item update-cache=yes
+    with_items:
+    - vim
+    - git
+    - screen
+    - redis-server
+    - wget
+    - ruby1.9.1
+    - ruby1.9.1-dev
+    #- rubygems
+    #- rake
+    - bundler
+    - libxml2
+    - libxml2-dev
+    - libxslt1.1
+    - libxslt1-dev
+    tags:
+    - packages
+  - name: set ruby 1.9 to be the default ruby
+    action: command update-alternatives --set ruby /usr/bin/ruby1.9.1
+    action: command update-alternatives --set gem /usr/bin/gem1.9.1
+
+- name: Start redis
+  hosts: oculusredis
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: bind redis to all IPs
+    lineinfile: 'dest=/etc/redis/redis.conf state=present regexp="^bind 127.0.0.1" line="#bind 127.0.0.1"'
+
+  - name: start redis
+    action: command /etc/init.d/redis-server start
+
+- name: Install Oculus worker
+  hosts: oculusredis
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: download oculus
+    #action: command git clone https://github.com/etsy/oculus.git /opt/oculus
+    git: repo=https://github.com/etsy/oculus.git dest=/opt/oculus
+  - name: run oculus bundle install
+    action: "shell cd /opt/oculus && bundle install"
+  - name: make directories
+    action: command mkdir -p $item
+    with_items:
+      - /var/run/oculus
+      - /var/log/oculus
+  - name: add hosts entry for oculusredis01
+    lineinfile: 'dest=/etc/hosts state=present regexp="^" insertafter="EOF" line="127.0.0.1 oculusredis01"'
+
+
+- name: Start Oculus worker
+  hosts: oculusredis
+  user: root
+  gather_facts: True
+  tasks:
+  - name: start oculus worker
+    action: "shell cd /opt/oculus && rake resque:start_workers"

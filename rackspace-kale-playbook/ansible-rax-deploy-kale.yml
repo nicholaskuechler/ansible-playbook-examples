@@ -1,0 +1,10 @@
+# Ansible playbook to set up Kale in Rackspace Cloud
+# * Sets up a new Skyline node
+# * Sets up a new elasticsearch node
+# * Sets up a new worker node
+# * Sets up a new Oculus node
+---
+- include: ansible-rax-deploy-skyline.yml
+- include: ansible-rax-deploy-elasticsearch.yml
+- include: ansible-rax-deploy-oculusredisworker.yml
+- include: ansible-rax-deploy-oculus.yml

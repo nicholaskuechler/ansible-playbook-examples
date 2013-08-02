@@ -1,0 +1,107 @@
+# Ansible playbook to create an elasticsearch node in Rackspace Cloud Servers
+---
+- name: Create elastic search nodes
+  hosts: local
+  user: root 
+  connection: local
+  gather_facts: False
+
+  tasks:
+    - name: Make elasticsearch-1
+      action:
+          module: rax
+          creds_file: /home/username/pyrax.creds
+          region: DFW
+          name: elasticsearch-1
+          image: e0ed4adb-3a00-433e-a0ac-a51f1bc1ea3d
+          flavor: 2
+          files:
+            /root/.ssh/authorized_keys: /home/username/.ssh/id_rsa.pub
+          wait: true
+          wait_timeout: 900
+      register: rax
+
+    - name: Add new instance to host group
+      local_action: add_host hostname=${item.accessIPv4} groupname=elasticsearch
+      with_items: ${rax.instances}
+
+    - name: Make elasticsearch-2
+      action:
+          module: rax
+          creds_file: /home/username/pyrax.creds
+          region: DFW
+          name: elasticsearch-2
+          image: e0ed4adb-3a00-433e-a0ac-a51f1bc1ea3d
+          flavor: 2
+          files:
+            /root/.ssh/authorized_keys: /home/username/.ssh/id_rsa.pub
+          wait: true
+          wait_timeout: 900
+      register: rax
+
+    - name: Add new instance to host group
+      local_action: add_host hostname=${item.accessIPv4} groupname=elasticsearch
+      with_items: ${rax.instances}
+
+- name: Install Packages
+  hosts: elasticsearch
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: install yum packages
+    action: yum state=installed pkg=$item
+    with_items:
+    - vim
+    - git
+    - screen
+    - java-1.7.0-openjdk
+    - java-1.7.0-openjdk-devel
+    - wget
+    - rubygems
+    - rubygem-rake
+    tags:
+    - packages
+
+- name: Install elasticsearch
+  hosts: elasticsearch
+  user: root
+  gather_facts: True
+
+  tasks:
+  - name: download elasticsearch
+    action: command wget https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-0.20.5.tar.gz
+  - name: make opt directory
+    action: command mkdir -p /opt
+  - name: extract elasticsearch
+    action: command tar -zxvf elasticsearch-0.20.5.tar.gz -C /opt
+  - name: symlink elasticsearch
+    action: command ln -s /opt/elasticsearch-0.20.5 /opt/elasticsearch
+  - name: download oculus
+    #action: command git clone https://github.com/etsy/oculus.git /opt/oculus
+    git: repo=https://github.com/etsy/oculus.git dest=/opt/oculus
+  - name: copy oculus elasticsearch plugins
+    action: command cp -R /opt/oculus/resources/elasticsearch-oculus-plugin /opt/elasticsearch/elasticsearch-oculus-plugin
+  - name: rake build for oculus plugins
+    action: shell cd /opt/elasticsearch/elasticsearch-oculus-plugin && rake build
+  - name: move oculus plugin in to place
+    action: command cp /opt/elasticsearch/elasticsearch-oculus-plugin/OculusPlugins.jar /opt/elasticsearch/lib/OculusPlugins.jar
+
+  - name: set up cluster name for elasticsearch
+    lineinfile: 'dest=/opt/elasticsearch/config/elasticsearch.yml state=present regexp="^" insertafter="EOF" line="cluster.name: {{ ansible_eth0["ipv4"]["address"] }}"'
+  - name: set up node name for elasticsearch
+    lineinfile: 'dest=/opt/elasticsearch/config/elasticsearch.yml state=present regexp="^" insertafter="EOF" line="node.name: {{ ansible_eth0["ipv4"]["address"] }}"'
+  - name: set up oculus options in elasticsearch config
+    lineinfile: 'dest=/opt/elasticsearch/config/elasticsearch.yml state=present regexp="^" insertafter="EOF" line="script.native:"'
+    lineinfile: 'dest=/opt/elasticsearch/config/elasticsearch.yml state=present regexp="^" insertafter="EOF" line="  oculus_euclidian.type: com.etsy.oculus.tsscorers.EuclidianScriptFactory"'
+    lineinfile: 'dest=/opt/elasticsearch/config/elasticsearch.yml state=present regexp="^" insertafter="EOF" line="  oculus_dtw.type: com.etsy.oculus.tsscorers.DTWScriptFactory"'
+
+- name: Start elasticsearch
+  hosts: elasticsearch
+  user: root
+  gather_facts: True
+  tasks:
+  - name: flush iptables - not recommended however this is proof of concept
+    action: command iptables -F
+  - name: start elasticsearch
+    action: command /opt/elasticsearch/bin/elasticsearch
